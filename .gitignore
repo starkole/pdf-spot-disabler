@@ -11,3 +11,6 @@
 *.lai
 *.la
 *.a
+
+# PDF files used for testing
+*.pdf
