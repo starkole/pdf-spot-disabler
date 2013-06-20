@@ -1,4 +1,4 @@
 pdf-spot-disabler
 =================
 
-Application for disabling spot colors in PDF files based on PoDoFo library
+Application for disabling spot colors in PDF files (based on PoDoFo library)
