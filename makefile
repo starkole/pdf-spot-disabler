@@ -3,16 +3,17 @@ CC=g++
 # Compiler options:
 # -c - compile and assemble only
 # -Wall - assemble all files
-CLIBS=-lpodofo -lfreetype -lfontconfig -ljpeg -lz -lssl -lidn -lcrypto
+CLIBS=-lfreetype -lfontconfig -ljpeg -lz -lssl -lidn -lcrypto
 SOURCES=pdf-spot-disabler.cpp
 EXECUTABLE=pdf-spot-disabler
 TESTFILE=test.pdf
+OUTFILE=processed.pdf
 
 all:
-	$(CC) $(SOURCES) -o $(EXECUTABLE) $(CLIBS)
+	$(CC) $(SOURCES) /usr/local/lib/libpodofo.a -o $(EXECUTABLE) $(CLIBS)
 
 test:
-	./$(EXECUTABLE) $(TESTFILE)
+	./$(EXECUTABLE) $(TESTFILE) $(OUTFILE)
 
 clean:
 	rm -rf *o $(EXECUTABLE)

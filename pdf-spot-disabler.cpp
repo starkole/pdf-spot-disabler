@@ -20,6 +20,7 @@
 
 // Include the standard headers for cout to write some output to the console.
 #include <iostream>
+#include <string>
 
 // Now include all podofo header files
 #include <podofo/podofo.h>
@@ -42,15 +43,17 @@ void PrintHelp()
     std::cout << "           equals \"pantone 877 c\" or \"PANTONE 877 C\")." << std::endl << std::endl;
 }
 
+const PoDoFo::PdfName noneColor("None");
+
 int main( int argc, char* argv[] )
 {
     /*
      * Check if a filename was passed as commandline argument.
      * If more than 1 argument or no argument is passed,
-     * a help message is displayed and the example application
+     * a help message is displayed and the application
      * will quit.
      */
-    if( argc != 2 )
+    if( argc < 3 )
     {
         PrintHelp();
         return -1;
@@ -59,67 +62,44 @@ int main( int argc, char* argv[] )
     // Load a document into a PdfMemDocument
     PdfMemDocument pdf(argv[1]);
     // Iterate over each page
-    for (int pn = 0; pn < pdf.GetPageCount(); ++pn) {
+    for (int pn = 0; pn < pdf.GetPageCount(); ++pn) 
+    {
         PoDoFo::PdfPage* page = pdf.GetPage(pn);
+
         // Iterate over all the PDF commands on that page:
-        PoDoFo::PdfContentsTokenizer tok(page);
-        const char* token = NULL;
-        PoDoFo::PdfVariant dvar;
-        PoDoFo::EPdfContentsType dtype;
-        while (tok.ReadNext(dtype, token, dvar)) {
-           /* if (dtype == PoDoFo::ePdfContentsType_Keyword)
-            {
-            // process type, token & var
-                //if (token == "l")
+        PoDoFo::PdfObject* res = (*page).GetResources();
+        if (res == NULL) std::cout << "\n\nEpic Fail!\n\n";
+        if( (*res).IsDictionary() && (*res).GetDictionary().HasKey( "ColorSpace" ) )
+        {
+          if ( (*res).GetDictionary().GetKey( "ColorSpace" )->IsDictionary() )
+          {
+            PoDoFo::PdfDictionary cs = (*res).GetDictionary().GetKey( "ColorSpace" )->GetDictionary();
+            // Go through all keys
+            PoDoFo::TKeyMap::iterator it = cs.GetKeys().begin();
+            while( it != cs.GetKeys().end() )
+              {
+                if ( (*it).second->IsReference() )
                 {
-                    std::cout << token;//<< "-";
+                  if (pdf.GetObjects().GetObject( (*it).second->GetReference() )->IsArray())
+                  {
+                    PoDoFo::PdfArray colorArray = pdf.GetObjects().GetObject( (*it).second->GetReference() )->GetArray();
+                    if ( colorArray.GetSize() > 1
+                         && colorArray[0].IsName()
+                         && colorArray[0].GetName().GetEscapedName() == "Separation" )
+                    {
+                      if ( (colorArray[1]).IsName() )
+                          std::cout << colorArray[1].GetName().GetEscapedName() << std::endl;
+                          colorArray[1] = noneColor;
+                          std::cout << colorArray[1].GetName().GetEscapedName() << std::endl;
+                    }
+                  }
                 }
-            }//*/
-            if (dtype == PoDoFo::ePdfContentsType_Variant)
-            {
-            // process type, token & var
-                if (dvar.IsName())
-                {
-                    std::cout << " "
-                    << dvar.GetDataTypeString();
-                }
-            } //*/
+                ++it;
+              }
+          }
         }
     } 
-/*
-The "process type, token & var" is where it gets a little more complex.
-You are given raw PDF commands to process. Luckily, if you're not actually
-rendering the page and all you want is the text, you can ignore most of them.
-The commands you need to process are:
-BT, ET, Td, TD, Ts, T, Tm, Tf, ", ', Tj and TJ
-The BT and ET commands mark the beginning and end of a text stream,
-so you want to ignore anything that's not between a BT/ET pair.
-The PDF language is RPN based. A command stream consists of values which
-are pushed onto a stack and commands which pop values off the stack and process them.
-All the commands you need to process have, at most, one parameter.
-That one parameter will be in the var object.
-The ", ', Tj and TJ commands are the only ones which actually generate text.
-", ' and Tj return a single string. Use var.IsString() and var.GetString() to process it.
-TJ returns an array of strings. You can extract each one with:
-if (var.isArray()) {
-    PoDoFo::PdfArray& a = var.GetArray();
-    for (size_t i = 0; i < a.GetSize(); ++i)
-        if (a[i].IsString())
-            // do something with a[i].GetString()
-The other commands are used to determine when to introduce a line break.
-" and ' also introduce line breaks. Your best bet is to download the PDF spec
-from Adobe and look up the text processing section. It explains what each command does in more detail.
-I found it very helpful to write a small program which takes a PDF file
-and dumps out the command stream for each page.
-    */
 
-    std::cout << std::endl
-              << "PDF file " 
-              << argv[1]
-              << " has "
-              << pdf.GetPageCount()
-              << " pages."
-              << std::endl;
-    
+    pdf.Write(argv[2]);
     return 0;
 }
