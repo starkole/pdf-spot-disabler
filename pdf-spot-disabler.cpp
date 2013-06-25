@@ -59,47 +59,70 @@ int main( int argc, char* argv[] )
         return -1;
     }
 
-    // Load a document into a PdfMemDocument
-    PdfMemDocument pdf(argv[1]);
+    // Load pdf file
+    PoDoFo::PdfMemDocument pdfDoc(argv[1]);
+    // Copy loaded pdf to the new file
+    PoDoFo::PdfOutputDevice pdfOutFile(argv[2]);
+    pdfDoc.Write(&pdfOutFile);
+    // TODO: Exit with error if loading fails
     // Iterate over each page
-    for (int pn = 0; pn < pdf.GetPageCount(); ++pn) 
+    for ( int pn = 0; pn < pdfDoc.GetPageCount(); ++pn ) 
     {
-        PoDoFo::PdfPage* page = pdf.GetPage(pn);
-
-        // Iterate over all the PDF commands on that page:
-        PoDoFo::PdfObject* res = (*page).GetResources();
-        if (res == NULL) std::cout << "\n\nEpic Fail!\n\n";
-        if( (*res).IsDictionary() && (*res).GetDictionary().HasKey( "ColorSpace" ) )
+        PoDoFo::PdfPage* page = pdfDoc.GetPage(pn);
+        // Get the Resource dictionary of the current page:
+        PoDoFo::PdfObject* pageResources = (*page).GetResources();
+        if ( pageResources == NULL )
         {
-          if ( (*res).GetDictionary().GetKey( "ColorSpace" )->IsDictionary() )
-          {
-            PoDoFo::PdfDictionary cs = (*res).GetDictionary().GetKey( "ColorSpace" )->GetDictionary();
-            // Go through all keys
-            PoDoFo::TKeyMap::iterator it = cs.GetKeys().begin();
-            while( it != cs.GetKeys().end() )
-              {
-                if ( (*it).second->IsReference() )
+            std::cout << "Error obtainig page\'s Resource dictionary!\n";
+            return 1;
+        } 
+        // Get the ColorSpace subdictionary
+        if( (*pageResources).IsDictionary()
+            && (*pageResources).GetDictionary().HasKey("ColorSpace") 
+            && (*pageResources).GetDictionary().GetKey("ColorSpace")->IsDictionary() )
+        {
+            PoDoFo::PdfDictionary colorSpace = (*pageResources).GetDictionary().
+                                               GetKey("ColorSpace")->GetDictionary();
+            /* The ColorSpace subdictionary contains entries
+            * like Name : Reference. Name is something like
+            * CS11, CS24 and Reference points to array
+            * with actual values of color entry.
+            */ 
+            // Go through all entries of the ColorSpace subdictionary
+            PoDoFo::TKeyMap::iterator it = colorSpace.GetKeys().begin();
+            while( it != colorSpace.GetKeys().end() )
+            {
+                // Obtaining color array by reference
+                if ( (*it).second->IsReference() 
+                     && pdfDoc.GetObjects().
+                        GetObject( (*it).second->GetReference() )->IsArray() )
                 {
-                  if (pdf.GetObjects().GetObject( (*it).second->GetReference() )->IsArray())
-                  {
-                    PoDoFo::PdfArray colorArray = pdf.GetObjects().GetObject( (*it).second->GetReference() )->GetArray();
+                    /* Color array for separation colorspace has 4 entries: 
+                     * [ /Separation name alternateSpace tintTransform ]
+                     * (see Pdf Reference, ch. 4.5.5)
+                     * If name entry would be replaced with special name /None, all objects
+                     * are using this colorspace become invisible.
+                     */
+                    PoDoFo::PdfArray colorArray = pdfDoc.GetObjects().
+                                                  GetObject( (*it).second->GetReference() )->
+                                                  GetArray();
+                    //Processing color array entries
                     if ( colorArray.GetSize() > 1
                          && colorArray[0].IsName()
-                         && colorArray[0].GetName().GetEscapedName() == "Separation" )
+                         && colorArray[0].GetName().GetEscapedName() == "Separation"
+                         && colorArray[1].IsName() )
                     {
-                      if ( (colorArray[1]).IsName() )
-                          std::cout << colorArray[1].GetName().GetEscapedName() << std::endl;
-                          colorArray[1] = noneColor;
-                          std::cout << colorArray[1].GetName().GetEscapedName() << std::endl;
+                        std::cout << colorArray[1].GetName().GetEscapedName() << std::endl;
+                        colorArray[1] = noneColor;
+                        std::cout << colorArray[1].GetName().GetEscapedName() << std::endl;
+                        colorArray.Write(&pdfOutFile,ePdfWriteMode_Compact);
                     }
-                  }
                 }
                 ++it;
-              }
-          }
-        }
-    } 
-
-    pdf.Write(argv[2]);
+              } // ColorSpace subdictionary iterator
+        } // ColorSpace subdictionary processing
+    } // Current Page processing
+    
+    
     return 0;
 }
