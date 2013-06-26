@@ -114,22 +114,14 @@ int main( int argc, char* argv[] )
                          && colorArray[0].GetName().GetEscapedName() == "Separation"
                          && colorArray[1].IsName() )
                     {
-                        //std::cout << colorArray[1].GetName().GetEscapedName() << std::endl;
                         colorArray[1] = noneColor;
-                        //colorArray.SetDirty( true );
-                        //std::cout << colorArray[1].GetName().GetEscapedName() << std::endl;
-                        std::string po;
-                        colorArrayObject->ToString(po);
-                        std::cout << po << std::endl;
-                        (*colorArrayObject) = colorArray;
-                        colorArrayObject->ToString(po);
-                        std::cout << po << std::endl;
-                        
-                        //colorArray.Write(&pdfOutFile,ePdfWriteMode_Compact);
-                        //(*colorArrayObject) = colorArray;
-                        //pdfDocObjects.WriteObject(colorArrayObject);
-                        //pdfDocObjects.push_back(colorArrayObject);
-                        colorArrayObject->Clear();
+
+                        // Create temporary object with reference from current object
+                        PoDoFo::PdfObject tmp (
+                                    colorArrayObject->Reference(),
+                                    colorArray );
+
+                        (*colorArrayObject) = tmp;
                     }
                 }
                 ++it;
@@ -137,17 +129,6 @@ int main( int argc, char* argv[] )
         } // ColorSpace subdictionary processing
     } // Current Page processing
 
-    std::cout << std::endl;
-    std::string po1;
-    std::vector<PdfReference>::iterator i = colorReferences.begin();
-    while( i != colorReferences.end() )
-    {
-        std::cout << "Getting object " << i->ToString() << std::endl;
-        ( pdfDocObjects.GetObject(*i) )->ToString(po1);
-        std::cout << po1 << std::endl;
-        i++;
-    }
-    
     pdfDoc.Write(argv[2]);
     return 0;
 }
