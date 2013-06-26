@@ -61,9 +61,10 @@ int main( int argc, char* argv[] )
 
     // Load pdf file
     PoDoFo::PdfMemDocument pdfDoc(argv[1]);
-    // Copy loaded pdf to the new file
-    PoDoFo::PdfOutputDevice pdfOutFile(argv[2]);
-    pdfDoc.Write(&pdfOutFile);
+    PoDoFo::PdfVecObjects pdfDocObjects = pdfDoc.GetObjects();
+    std::vector<PdfReference> colorReferences;
+    // Setup output file for writing
+    //PoDoFo::PdfOutputDevice pdfOutFile(argv[2]);
     // TODO: Exit with error if loading fails
     // Iterate over each page
     for ( int pn = 0; pn < pdfDoc.GetPageCount(); ++pn ) 
@@ -103,26 +104,50 @@ int main( int argc, char* argv[] )
                      * If name entry would be replaced with special name /None, all objects
                      * are using this colorspace become invisible.
                      */
-                    PoDoFo::PdfArray colorArray = pdfDoc.GetObjects().
-                                                  GetObject( (*it).second->GetReference() )->
-                                                  GetArray();
+                    colorReferences.push_back( (*it).second->GetReference() );
+                    PoDoFo::PdfObject* colorArrayObject = pdfDocObjects.
+                                                  GetObject( (*it).second->GetReference() );
+                    PoDoFo::PdfArray colorArray = colorArrayObject->GetArray();
                     //Processing color array entries
                     if ( colorArray.GetSize() > 1
                          && colorArray[0].IsName()
                          && colorArray[0].GetName().GetEscapedName() == "Separation"
                          && colorArray[1].IsName() )
                     {
-                        std::cout << colorArray[1].GetName().GetEscapedName() << std::endl;
+                        //std::cout << colorArray[1].GetName().GetEscapedName() << std::endl;
                         colorArray[1] = noneColor;
-                        std::cout << colorArray[1].GetName().GetEscapedName() << std::endl;
-                        colorArray.Write(&pdfOutFile,ePdfWriteMode_Compact);
+                        //colorArray.SetDirty( true );
+                        //std::cout << colorArray[1].GetName().GetEscapedName() << std::endl;
+                        std::string po;
+                        colorArrayObject->ToString(po);
+                        std::cout << po << std::endl;
+                        (*colorArrayObject) = colorArray;
+                        colorArrayObject->ToString(po);
+                        std::cout << po << std::endl;
+                        
+                        //colorArray.Write(&pdfOutFile,ePdfWriteMode_Compact);
+                        //(*colorArrayObject) = colorArray;
+                        //pdfDocObjects.WriteObject(colorArrayObject);
+                        //pdfDocObjects.push_back(colorArrayObject);
+                        colorArrayObject->Clear();
                     }
                 }
                 ++it;
               } // ColorSpace subdictionary iterator
         } // ColorSpace subdictionary processing
     } // Current Page processing
+
+    std::cout << std::endl;
+    std::string po1;
+    std::vector<PdfReference>::iterator i = colorReferences.begin();
+    while( i != colorReferences.end() )
+    {
+        std::cout << "Getting object " << i->ToString() << std::endl;
+        ( pdfDocObjects.GetObject(*i) )->ToString(po1);
+        std::cout << po1 << std::endl;
+        i++;
+    }
     
-    
+    pdfDoc.Write(argv[2]);
     return 0;
 }
