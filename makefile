@@ -4,7 +4,7 @@ CC=g++
 # -c - compile and assemble only
 # -Wall - assemble all files
 CLIBS=-lfreetype -lfontconfig -ljpeg -lz -lssl -lidn -lcrypto
-SOURCES=pdf-spot-disabler.cpp
+SOURCES=pdf-spot-disabler.cpp getopt/getopt_pp.cpp
 EXECUTABLE=pdf-spot-disabler
 TESTFILE=test.pdf
 OUTFILE=processed.pdf

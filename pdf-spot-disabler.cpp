@@ -22,11 +22,11 @@
 #include <iostream>
 #include <string>
 
-// Now include all podofo header files
+// Include all podofo header files
 #include <podofo/podofo.h>
+//Include command line options parser
+#include "getopt/getopt_pp.h"
 
-// All podofo classes are member of the PoDoFo namespace.
-using namespace PoDoFo;
 
 void PrintHelp()
 {
@@ -34,7 +34,8 @@ void PrintHelp()
               << " =====here will be some brief descrition of what this app is doing ========" << std::endl
               << "======repo at git ==============" << std::endl << std::endl;
     std::cout << "Usage:" << std::endl;
-    std::cout << "  pdf-spot-disabler in.pdf [out.pdf] spotName1 [spotName2] [...] [spotNameN]" << std::endl << std::endl;
+    std::cout << "  pdf-spot-disabler [-v] in.pdf [out.pdf] spotName1 [spotName2] [...] [spotNameN]" << std::endl << std::endl;
+    std::cout << "  -v       lists spots of in.pdf that can be disabled." << std::endl; 
     std::cout << "  spotName is the name of the spot color being disabled." << std::endl; 
     std::cout << "           It can be full (eg. \"Pantone 877 C\" or \"Pantone" << std::endl;
     std::cout << "           Process Magenta C\" or \"My Custom Spot\")" << std::endl;
@@ -43,7 +44,7 @@ void PrintHelp()
     std::cout << "           equals \"pantone 877 c\" or \"PANTONE 877 C\")." << std::endl << std::endl;
 }
 
-const PoDoFo::PdfName noneColor("None");
+const PoDoFo::PdfName NONE_COLOR("None");
 
 int main( int argc, char* argv[] )
 {
@@ -58,11 +59,15 @@ int main( int argc, char* argv[] )
         PrintHelp();
         return -1;
     }
-
+    GetOpt::GetOpt_pp programOptions (argc, argv);
+    if ( programOptions >> GetOpt::OptionPresent('h', "help") )
+    {
+      std::cout << "It Works!!!!!!!!!" << std::endl << std::endl;
+    }
     // Load pdf file
     PoDoFo::PdfMemDocument pdfDoc(argv[1]);
     PoDoFo::PdfVecObjects pdfDocObjects = pdfDoc.GetObjects();
-    std::vector<PdfReference> colorReferences;
+    std::vector<PoDoFo::PdfReference> colorReferences;
     // Setup output file for writing
     //PoDoFo::PdfOutputDevice pdfOutFile(argv[2]);
     // TODO: Exit with error if loading fails
@@ -114,14 +119,10 @@ int main( int argc, char* argv[] )
                          && colorArray[0].GetName().GetEscapedName() == "Separation"
                          && colorArray[1].IsName() )
                     {
-                        colorArray[1] = noneColor;
-
-                        // Create temporary object with reference from current object
-                        PoDoFo::PdfObject tmp (
+                        colorArray[1] = NONE_COLOR;
+                        (*colorArrayObject) = PoDoFo::PdfObject (
                                     colorArrayObject->Reference(),
                                     colorArray );
-
-                        (*colorArrayObject) = tmp;
                     }
                 }
                 ++it;
