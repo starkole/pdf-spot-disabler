@@ -21,67 +21,65 @@
 // Include the standard headers for cout to write some output to the console.
 #include <iostream>
 #include <string>
+#include <algorithm>
 
 // Include all podofo header files
 #include <podofo/podofo.h>
 //Include command line options parser
 #include "getopt/getopt_pp.h"
 
-
-void PrintHelp()
-{
-    std::cout << "Application for disabling spot colors in PDF files." << std::endl
-              << " =====here will be some brief descrition of what this app is doing ========" << std::endl
-              << "======repo at git ==============" << std::endl << std::endl;
-    std::cout << "Usage:" << std::endl;
-    std::cout << "  pdf-spot-disabler [-v] in.pdf [out.pdf] spotName1 [spotName2] [...] [spotNameN]" << std::endl << std::endl;
-    std::cout << "  -v       lists spots of in.pdf that can be disabled." << std::endl; 
-    std::cout << "  spotName is the name of the spot color being disabled." << std::endl; 
-    std::cout << "           It can be full (eg. \"Pantone 877 C\" or \"Pantone" << std::endl;
-    std::cout << "           Process Magenta C\" or \"My Custom Spot\")" << std::endl;
-    std::cout << "           or partial (eg. \"877\" or \"Magenta\" )." << std::endl;
-    std::cout << "           spotName is case independent (eg. \"Pantone 877 C\"" << std::endl;
-    std::cout << "           equals \"pantone 877 c\" or \"PANTONE 877 C\")." << std::endl << std::endl;
-}
-
 const PoDoFo::PdfName NONE_COLOR("None");
 
-int main( int argc, char* argv[] )
+void PrintHelpMessage()
 {
-    /*
-     * Check if a filename was passed as commandline argument.
-     * If more than 1 argument or no argument is passed,
-     * a help message is displayed and the application
-     * will quit.
-     */
-    if( argc < 3 )
-    {
-        PrintHelp();
-        return -1;
-    }
-    GetOpt::GetOpt_pp programOptions (argc, argv);
-    if ( programOptions >> GetOpt::OptionPresent('h', "help") )
-    {
-      std::cout << "It Works!!!!!!!!!" << std::endl << std::endl;
-    }
-    // Load pdf file
-    PoDoFo::PdfMemDocument pdfDoc(argv[1]);
-    PoDoFo::PdfVecObjects pdfDocObjects = pdfDoc.GetObjects();
+    std::cout << std::endl;
+    std::cout << "Application for disabling spot colors in PDF files."
+              << " It hides all objects having specified spot color."
+              << std::endl;
+    std::cout << std::endl;
+    std::cout << "Usage:"
+              << std::endl;
+    std::cout << "  pdf-spot-disabler in.pdf [out.pdf] [-options]"
+              << " [spotName1 spotName2 ... spotNameN]"
+              << std::endl;
+    std::cout << std::endl;
+    std::cout << "Valid options are:"
+              << std::endl;
+    std::cout << "  -l, --list   lists spots of in.pdf that can be disabled."
+              << std::endl;
+    std::cout << "  -h, --help   prints this message"
+              << std::endl;
+    std::cout << std::endl;
+    std::cout << "spotName is the name of the spot color being disabled. "; 
+    std::cout << "It can be full (eg. \"Pantone 877 C\" or \"Pantone ";
+    std::cout << "Process Magenta C\" or \"My Custom Spot\") ";
+    std::cout << "or partial (eg. \"877\" or \"Magenta\" ). ";
+    std::cout << "spotName is case independent (eg. \"Pantone 877 C\" ";
+    std::cout << "equals \"pantone 877 c\" or \"PANTONE 877 C\")." << std::endl;
+    std::cout << "If no spot names specified, disables all spots."
+              << std::endl;
+    std::cout << std::endl;
+    std::cout << "Copyright (C) 2013 by Pavlo Oleshkevych"<< std::endl;
+    std::cout << "Sources available at https://github.com/starkole/pdf-spot-disabler"
+              << std::endl;
+    std::cout << std::endl;
+}
+
+std::vector<PoDoFo::PdfReference> GetColorReferences( 
+                                      const PoDoFo::PdfMemDocument & pdfDocument )
+// Returns a vector with references to color decricption arrays in pdf document
+{
+    //Initilaise references vector being returned bu this function
     std::vector<PoDoFo::PdfReference> colorReferences;
-    // Setup output file for writing
-    //PoDoFo::PdfOutputDevice pdfOutFile(argv[2]);
-    // TODO: Exit with error if loading fails
-    // Iterate over each page
-    for ( int pn = 0; pn < pdfDoc.GetPageCount(); ++pn ) 
+    
+    // Iterate over each page of pdf document
+    for ( int pn = 0; pn < pdfDocument.GetPageCount(); ++pn ) 
     {
-        PoDoFo::PdfPage* page = pdfDoc.GetPage(pn);
+        PoDoFo::PdfPage* page = pdfDocument.GetPage(pn);
         // Get the Resource dictionary of the current page:
         PoDoFo::PdfObject* pageResources = (*page).GetResources();
-        if ( pageResources == NULL )
-        {
-            std::cout << "Error obtainig page\'s Resource dictionary!\n";
-            return 1;
-        } 
+        // If something wrong with this page - just continue with next
+        if ( pageResources == NULL ) continue; 
         // Get the ColorSpace subdictionary
         if( (*pageResources).IsDictionary()
             && (*pageResources).GetDictionary().HasKey("ColorSpace") 
@@ -99,21 +97,113 @@ int main( int argc, char* argv[] )
             while( it != colorSpace.GetKeys().end() )
             {
                 // Obtaining color array by reference
-                if ( (*it).second->IsReference() 
-                     && pdfDoc.GetObjects().
-                        GetObject( (*it).second->GetReference() )->IsArray() )
+                if ( (*it).second->IsReference() )
                 {
-                    /* Color array for separation colorspace has 4 entries: 
-                     * [ /Separation name alternateSpace tintTransform ]
-                     * (see Pdf Reference, ch. 4.5.5)
-                     * If name entry would be replaced with special name /None, all objects
-                     * are using this colorspace become invisible.
-                     */
-                    colorReferences.push_back( (*it).second->GetReference() );
-                    PoDoFo::PdfObject* colorArrayObject = pdfDocObjects.
-                                                  GetObject( (*it).second->GetReference() );
-                    PoDoFo::PdfArray colorArray = colorArrayObject->GetArray();
-                    //Processing color array entries
+                    PoDoFo::PdfReference ref = (*it).second->GetReference();
+                    //Check refrence vector for dublicates
+                    if ( std::count(colorReferences.begin(),
+                                    colorReferences.end(),
+                                    ref) == 0 )
+                    {
+                        // If current reference is unique, add it to the vector
+                        colorReferences.push_back( ref );
+                    }
+                }
+                ++it;
+            } // ColorSpace subdictionary iterator
+        } // ColorSpace subdictionary processing
+    } // Current Page processing
+
+    return colorReferences;
+}
+
+void ListAvailableSpots( const PoDoFo::PdfMemDocument & pdfDoc,
+                         std::vector<PoDoFo::PdfReference> colorReferences )
+{
+    std::vector<PoDoFo::PdfReference>::iterator it = colorReferences.begin();
+    while ( it != colorReferences.end() )
+    {
+        // Obtaining color array by reference
+        if ( pdfDoc.GetObjects().GetObject(*it)->IsArray() )
+            {
+                /* Color array for separation colorspace has 4 entries: 
+                * [ /Separation name alternateSpace tintTransform ]
+                */
+                PoDoFo::PdfVecObjects pdfDocObjects = pdfDoc.GetObjects();
+                PoDoFo::PdfObject* colorArrayObject = pdfDocObjects.GetObject(*it);
+                PoDoFo::PdfArray colorArray = colorArrayObject->GetArray();
+                //Processing color array entries
+                if ( colorArray.GetSize() > 1
+                     && colorArray[0].IsName()
+                     && colorArray[0].GetName().GetEscapedName() == "Separation"
+                     && colorArray[1].IsName() )
+                {
+                    std::string spotName = colorArray[1].GetName().GetEscapedName();
+                    while ( spotName.find("#20") != std::string::npos )
+                        spotName.replace ( spotName.find("#20"), 3, " " );
+                    std::cout << spotName << std::endl;
+                }
+            }
+        ++it;
+    } // Iterating through color references
+}
+
+int main( int argc, char* argv[] )
+{
+    // Initialise command line parser
+    GetOpt::GetOpt_pp commandLine (argc, argv);
+    // Print help message and exit if needed
+    if ( argc < 2
+         || commandLine >> GetOpt::OptionPresent('h', "help")
+         || commandLine >> GetOpt::OptionPresent('?') )
+    {
+      PrintHelpMessage();
+      return 0;
+    }
+
+    std::vector<std::string> programOptions;
+    commandLine >> GetOpt::GlobalOption(programOptions);
+    std::cout << "Global options: ";
+    std::vector<std::string>::iterator i = programOptions.begin();
+    while ( i != programOptions.end() )
+    {
+        std::cout << " " << (*i);
+        ++i;
+    }
+    std::cout << std::endl;
+
+    // Load pdf file
+    PoDoFo::PdfMemDocument pdfDoc(argv[1]);
+    PoDoFo::PdfVecObjects pdfDocObjects = pdfDoc.GetObjects();
+    std::vector<PoDoFo::PdfReference> colorReferences;
+    // TODO: Exit with error if loading fails
+
+    colorReferences = GetColorReferences(pdfDoc);
+
+    // List all spots from input file and exit if needed
+    if ( commandLine >> GetOpt::OptionPresent('l', "list") )
+    {
+        ListAvailableSpots( pdfDoc, GetColorReferences(pdfDoc) );
+        return 0;
+    }
+
+
+    std::vector<PoDoFo::PdfReference>::iterator it = colorReferences.begin();
+    while ( it != colorReferences.end() )
+    {
+        // Obtaining color array by reference
+        if ( pdfDoc.GetObjects().GetObject(*it)->IsArray() )
+            {
+                /* Color array for separation colorspace has 4 entries: 
+                * [ /Separation name alternateSpace tintTransform ]
+                * (see Pdf Reference, ch. 4.5.5)
+                * If name entry would be replaced with special name /None, all objects
+                * are using this colorspace become invisible.
+                */
+                
+                PoDoFo::PdfObject* colorArrayObject = pdfDocObjects.GetObject(*it);
+                PoDoFo::PdfArray colorArray = colorArrayObject->GetArray();
+                //Processing color array entries
                     if ( colorArray.GetSize() > 1
                          && colorArray[0].IsName()
                          && colorArray[0].GetName().GetEscapedName() == "Separation"
@@ -124,11 +214,10 @@ int main( int argc, char* argv[] )
                                     colorArrayObject->Reference(),
                                     colorArray );
                     }
-                }
-                ++it;
-              } // ColorSpace subdictionary iterator
-        } // ColorSpace subdictionary processing
-    } // Current Page processing
+            }
+        ++it;
+    } // Iterating through color references
+
 
     pdfDoc.Write(argv[2]);
     return 0;
