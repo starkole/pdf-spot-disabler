@@ -60,16 +60,17 @@ void PrintHelpMessage()
               << std::endl;
     std::cout << std::endl;
     std::cout << "Copyright (C) 2013 by Pavlo Oleshkevych"<< std::endl;
-    std::cout << "Sources available at https://github.com/starkole/pdf-spot-disabler"
+    std::cout << "Sources available at"
+              << "https://github.com/starkole/pdf-spot-disabler"
               << std::endl;
     std::cout << std::endl;
 }
 
 std::vector<PoDoFo::PdfReference> GetColorReferences( 
-                                      const PoDoFo::PdfMemDocument & pdfDocument )
-// Returns a vector with references to color decricption arrays in pdf document
+                                    const PoDoFo::PdfMemDocument & pdfDocument )
+// Returns a vector with references to color decryption arrays in pdf document
 {
-    //Initilaise references vector being returned bu this function
+    //Initialize references vector being returned by this function
     std::vector<PoDoFo::PdfReference> colorReferences;
     
     // Iterate over each page of pdf document
@@ -83,24 +84,26 @@ std::vector<PoDoFo::PdfReference> GetColorReferences(
         // Get the ColorSpace subdictionary
         if( (*pageResources).IsDictionary()
             && (*pageResources).GetDictionary().HasKey("ColorSpace") 
-            && (*pageResources).GetDictionary().GetKey("ColorSpace")->IsDictionary() )
+            && (*pageResources).GetDictionary().GetKey("ColorSpace")
+                                               ->IsDictionary() )
         {
-            PoDoFo::PdfDictionary colorSpace = (*pageResources).GetDictionary().
-                                               GetKey("ColorSpace")->GetDictionary();
-            /* The ColorSpace subdictionary contains entries
-            * like Name : Reference. Name is something like
-            * CS11, CS24 and Reference points to array
-            * with actual values of color entry.
+            PoDoFo::PdfDictionary colorSpace = (*pageResources)
+                                               .GetDictionary()
+                                               .GetKey("ColorSpace")
+                                               ->GetDictionary();
+            /* The ColorSpace subdictionary entries are like "Name : Reference".
+            * "Name" is something like CS11, CS24 and "Reference" points
+            * to array with actual values of color entry.
             */ 
-            // Go through all entries of the ColorSpace subdictionary
             PoDoFo::TKeyMap::iterator it = colorSpace.GetKeys().begin();
+            // Go through all entries of the ColorSpace subdictionary
             while( it != colorSpace.GetKeys().end() )
             {
                 // Obtaining color array by reference
                 if ( (*it).second->IsReference() )
                 {
                     PoDoFo::PdfReference ref = (*it).second->GetReference();
-                    //Check refrence vector for dublicates
+                    //Check reference vector for duplicates
                     if ( std::count(colorReferences.begin(),
                                     colorReferences.end(),
                                     ref) == 0 )
@@ -117,40 +120,67 @@ std::vector<PoDoFo::PdfReference> GetColorReferences(
     return colorReferences;
 }
 
-void ListAvailableSpots( const PoDoFo::PdfMemDocument & pdfDoc,
+void ListAvailableSpots( const PoDoFo::PdfMemDocument & pdfDocument,
                          std::vector<PoDoFo::PdfReference> colorReferences )
+// Prints pdf document spot names to std::cout
 {
     std::vector<PoDoFo::PdfReference>::iterator it = colorReferences.begin();
     while ( it != colorReferences.end() )
     {
         // Obtaining color array by reference
-        if ( pdfDoc.GetObjects().GetObject(*it)->IsArray() )
+        if ( pdfDocument.GetObjects().GetObject(*it)->IsArray() )
+        {
+            PoDoFo::PdfArray colorArray = pdfDocument.GetObjects()
+                                                     .GetObject(*it)
+                                                     ->GetArray();
+            /* Color array for separation colorspace has 4 entries: 
+            *[ /Separation spotName alternateSpace tintTransform ]
+            */
+            if ( colorArray.GetSize() > 1
+                 && colorArray[0].IsName()
+                 && colorArray[0].GetName().GetEscapedName() == "Separation"
+                 && colorArray[1].IsName() )
             {
-                /* Color array for separation colorspace has 4 entries: 
-                * [ /Separation name alternateSpace tintTransform ]
-                */
-                PoDoFo::PdfVecObjects pdfDocObjects = pdfDoc.GetObjects();
-                PoDoFo::PdfObject* colorArrayObject = pdfDocObjects.GetObject(*it);
-                PoDoFo::PdfArray colorArray = colorArrayObject->GetArray();
-                //Processing color array entries
-                if ( colorArray.GetSize() > 1
-                     && colorArray[0].IsName()
-                     && colorArray[0].GetName().GetEscapedName() == "Separation"
-                     && colorArray[1].IsName() )
-                {
-                    std::string spotName = colorArray[1].GetName().GetEscapedName();
-                    while ( spotName.find("#20") != std::string::npos )
-                        spotName.replace ( spotName.find("#20"), 3, " " );
-                    std::cout << spotName << std::endl;
-                }
+                std::string spotName = colorArray[1].GetName().GetEscapedName();
+                /* In pdf's spot names spaces are replaced with "#20".
+                 * So, replacing them back
+                 */
+                while ( spotName.find("#20") != std::string::npos )
+                    spotName.replace ( spotName.find("#20"), 3, " " );
+                std::cout << spotName << std::endl;
             }
+        }
         ++it;
     } // Iterating through color references
+}
+bool IsPdfFileName(std::string name)
+// True if given string is pdf file name
+{
+    int len = name.length();
+    return ( len > 4 
+             && name[len-1] == 'f'
+             && name[len-2] == 'd'
+             && name[len-3] == 'p'
+             && name[len-4] == '.' );
+}
+
+
+bool IsProgramOptionsValid( std::vector<std::string> programOptions )
+// Checks if provided command line options are valid
+{
+    if ( programOptions.size() < 1 ) return false;
+    if ( programOptions.size() < 2
+         && IsPdfFileName(programOptions[0]) ) return true;
+    if ( programOptions.size() > 1 
+         && IsPdfFileName(programOptions[0])
+         && IsPdfFileName(programOptions[1]) ) return true;
+
+    return false;
 }
 
 int main( int argc, char* argv[] )
 {
-    // Initialise command line parser
+    // Initialize command line parser
     GetOpt::GetOpt_pp commandLine (argc, argv);
     // Print help message and exit if needed
     if ( argc < 2
@@ -160,30 +190,36 @@ int main( int argc, char* argv[] )
       PrintHelpMessage();
       return 0;
     }
-
+    // Initialize vector for storing command line options
     std::vector<std::string> programOptions;
     commandLine >> GetOpt::GlobalOption(programOptions);
+
     std::cout << "Global options: ";
     std::vector<std::string>::iterator i = programOptions.begin();
     while ( i != programOptions.end() )
     {
-        std::cout << " " << (*i);
+        std::cout << ":" << (*i);
         ++i;
     }
     std::cout << std::endl;
 
+    if (not IsProgramOptionsValid(programOptions) )
+    {
+        std::cout << "Invalid command line option provided!" << std::endl;
+        PrintHelpMessage();
+        return 1;
+    }
     // Load pdf file
-    PoDoFo::PdfMemDocument pdfDoc(argv[1]);
+    PoDoFo::PdfMemDocument pdfDoc(programOptions[0].c_str());
     PoDoFo::PdfVecObjects pdfDocObjects = pdfDoc.GetObjects();
     std::vector<PoDoFo::PdfReference> colorReferences;
-    // TODO: Exit with error if loading fails
 
     colorReferences = GetColorReferences(pdfDoc);
 
     // List all spots from input file and exit if needed
     if ( commandLine >> GetOpt::OptionPresent('l', "list") )
     {
-        ListAvailableSpots( pdfDoc, GetColorReferences(pdfDoc) );
+        ListAvailableSpots( pdfDoc, colorReferences );
         return 0;
     }
 
@@ -219,6 +255,6 @@ int main( int argc, char* argv[] )
     } // Iterating through color references
 
 
-    pdfDoc.Write(argv[2]);
+    pdfDoc.Write(programOptions[1].c_str());
     return 0;
 }
