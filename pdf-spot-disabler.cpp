@@ -50,6 +50,10 @@ void PrintHelpMessage()
     std::cout << "  -h, --help   prints this message"
               << std::endl;
     std::cout << std::endl;
+    std::cout << "If the only in.pdf file name specified lists all available"
+              << " spots, just like -l option."
+              << std::endl;          
+    std::cout << std::endl;
     std::cout << "spotName is the name of the spot color being disabled. "; 
     std::cout << "It can be full (eg. \"Pantone 877 C\" or \"Pantone ";
     std::cout << "Process Magenta C\" or \"My Custom Spot\") ";
@@ -210,47 +214,53 @@ int main( int argc, char* argv[] )
         return 1;
     }
     // Load pdf file
-    PoDoFo::PdfMemDocument pdfDoc(programOptions[0].c_str());
+    PoDoFo::PdfMemDocument pdfDoc( programOptions[0].c_str() );
+    // Initialize vector of pointers to all pdf objects
     PoDoFo::PdfVecObjects pdfDocObjects = pdfDoc.GetObjects();
-    std::vector<PoDoFo::PdfReference> colorReferences;
-
-    colorReferences = GetColorReferences(pdfDoc);
+    //Obtain references to color arrays
+    std::vector<PoDoFo::PdfReference> colorReferences = GetColorReferences(pdfDoc);
 
     // List all spots from input file and exit if needed
-    if ( commandLine >> GetOpt::OptionPresent('l', "list") )
+    if ( commandLine >> GetOpt::OptionPresent('l', "list") 
+         || programOptions.size() == 1 )
     {
         ListAvailableSpots( pdfDoc, colorReferences );
         return 0;
     }
 
-
+    // Iterate through all color arrays and disable spots if needed
     std::vector<PoDoFo::PdfReference>::iterator it = colorReferences.begin();
     while ( it != colorReferences.end() )
     {
         // Obtaining color array by reference
         if ( pdfDoc.GetObjects().GetObject(*it)->IsArray() )
+        {
+            /* Color array for separation colorspace has 4 entries: 
+             * [ /Separation name alternateSpace tintTransform ]
+             * (see Pdf Reference, ch. 4.5.5)
+             * If name entry would be replaced with special name /None,
+             * all objects are using this colorspace become invisible.
+             */
+            // Get the pointer to colorArrayObject for future saving
+            PoDoFo::PdfObject* colorArrayObject = pdfDocObjects.GetObject(*it);
+            // Get the copy of color array value
+            PoDoFo::PdfArray colorArray = colorArrayObject->GetArray();
+            //Processing color array entries
+            if ( colorArray.GetSize() > 1
+                 && colorArray[0].IsName()
+                 && colorArray[0].GetName().GetEscapedName() == "Separation"
+                 && colorArray[1].IsName() )
             {
-                /* Color array for separation colorspace has 4 entries: 
-                * [ /Separation name alternateSpace tintTransform ]
-                * (see Pdf Reference, ch. 4.5.5)
-                * If name entry would be replaced with special name /None, all objects
-                * are using this colorspace become invisible.
-                */
-                
-                PoDoFo::PdfObject* colorArrayObject = pdfDocObjects.GetObject(*it);
-                PoDoFo::PdfArray colorArray = colorArrayObject->GetArray();
-                //Processing color array entries
-                    if ( colorArray.GetSize() > 1
-                         && colorArray[0].IsName()
-                         && colorArray[0].GetName().GetEscapedName() == "Separation"
-                         && colorArray[1].IsName() )
-                    {
-                        colorArray[1] = NONE_COLOR;
-                        (*colorArrayObject) = PoDoFo::PdfObject (
-                                    colorArrayObject->Reference(),
-                                    colorArray );
-                    }
-            }
+                // Change the second array item to /None value
+                colorArray[1] = NONE_COLOR;
+                // Construct new object from reference to current color array
+                // and changed array value. Assign this new object value to
+                // current colorArray object
+                (*colorArrayObject) = PoDoFo::PdfObject ( 
+                                                colorArrayObject->Reference(),
+                                                colorArray );
+            } // Processing color array entries
+        } // Check if referenced object is an array
         ++it;
     } // Iterating through color references
 
