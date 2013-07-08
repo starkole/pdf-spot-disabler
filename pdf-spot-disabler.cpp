@@ -40,7 +40,7 @@ void PrintHelpMessage()
     std::cout << "Usage:"
               << std::endl;
     std::cout << "  pdf-spot-disabler in.pdf [out.pdf] [-options]"
-              << " [spotName1 spotName2 ... spotNameN]"
+              << " [SpotName1 SpotName2 ... SpotNameN]"
               << std::endl;
     std::cout << std::endl;
     std::cout << "Valid options are:"
@@ -54,17 +54,18 @@ void PrintHelpMessage()
               << " spots, just like -l option."
               << std::endl;          
     std::cout << std::endl;
-    std::cout << "spotName is the name of the spot color being disabled. "; 
+    std::cout << "SpotName is the name of the spot color being disabled. "; 
     std::cout << "It can be full (eg. \"Pantone 877 C\" or \"Pantone ";
     std::cout << "Process Magenta C\" or \"My Custom Spot\") ";
     std::cout << "or partial (eg. \"877\" or \"Magenta\" ). ";
-    std::cout << "spotName is case independent (eg. \"Pantone 877 C\" ";
-    std::cout << "equals \"pantone 877 c\" or \"PANTONE 877 C\")." << std::endl;
+    std::cout << "SpotName is case independent (eg. \"Pantone 877 C\" ";
+    std::cout << "equals \"pantone 877 c\" or \"PANTONE 877 C\")."
+              << std::endl;
     std::cout << "If no spot names specified, disables all spots."
               << std::endl;
     std::cout << std::endl;
     std::cout << "Copyright (C) 2013 by Pavlo Oleshkevych"<< std::endl;
-    std::cout << "Sources available at"
+    std::cout << "Sources available at "
               << "https://github.com/starkole/pdf-spot-disabler"
               << std::endl;
     std::cout << std::endl;
@@ -124,6 +125,14 @@ std::vector<PoDoFo::PdfReference> GetColorReferences(
     return colorReferences;
 }
 
+void CreateSpaces ( std::string & name )
+// Converts #20 sequences to spaces
+{
+  while ( name.find("#20") != std::string::npos )
+                    name.replace ( name.find("#20"), 3, " " );
+  return;
+}
+
 void ListAvailableSpots( const PoDoFo::PdfMemDocument & pdfDocument,
                          std::vector<PoDoFo::PdfReference> colorReferences )
 // Prints pdf document spot names to std::cout
@@ -149,15 +158,14 @@ void ListAvailableSpots( const PoDoFo::PdfMemDocument & pdfDocument,
                 /* In pdf's spot names spaces are replaced with "#20".
                  * So, replacing them back
                  */
-                while ( spotName.find("#20") != std::string::npos )
-                    spotName.replace ( spotName.find("#20"), 3, " " );
+                CreateSpaces(spotName);
                 std::cout << spotName << std::endl;
             }
         }
         ++it;
     } // Iterating through color references
 }
-bool IsPdfFileName(std::string name)
+bool IsPdfFileName(const std::string name)
 // True if given string is pdf file name
 {
     int len = name.length();
@@ -169,7 +177,7 @@ bool IsPdfFileName(std::string name)
 }
 
 
-bool IsProgramOptionsValid( std::vector<std::string> programOptions )
+bool IsProgramOptionsValid( const std::vector<std::string> programOptions )
 // Checks if provided command line options are valid
 {
     if ( programOptions.size() < 1 ) return false;
@@ -179,6 +187,26 @@ bool IsProgramOptionsValid( std::vector<std::string> programOptions )
          && IsPdfFileName(programOptions[0])
          && IsPdfFileName(programOptions[1]) ) return true;
 
+    return false;
+}
+
+bool MustBeDisabled( std::string rawSpotName,
+                     std::vector<std::string> & spotsToDisable )
+// Checks if spot rawSpotName must be disabled according to spotsToDisable list
+{
+    // Convert rawSpotName to lowercase
+    std::transform(rawSpotName.begin(), rawSpotName.end(),
+                   rawSpotName.begin(), ::tolower);
+    // Change %20 sequences to spaces
+    CreateSpaces(rawSpotName);
+    // Iterate through spotsToDisable
+    std::vector<std::string>::iterator it = spotsToDisable.begin();
+    while ( it != spotsToDisable.end() )
+    {
+        // Check if rawSpotName contains current item from spotsToDisable list
+        if ( rawSpotName.find(*it) != std::string::npos ) return true;
+        ++it;
+    }
     return false;
 }
 
@@ -228,7 +256,27 @@ int main( int argc, char* argv[] )
         return 0;
     }
 
+    //Normalized vector of given spot names being disabled
+    std::vector<std::string> spotsToDisable;
+    std::string temporarySpotName;
+    std::vector<std::string>::iterator iter = programOptions.begin();
+    while ( iter != programOptions.end() )
+    {
+        if ( not IsPdfFileName(*iter) )
+        {
+            temporarySpotName = *iter;
+            // Convert SpotName to lowercase
+            std::transform(temporarySpotName.begin(), temporarySpotName.end(),
+                   temporarySpotName.begin(), ::tolower);
+            // Add temporarySpotName to the list of spots being disabled
+            spotsToDisable.push_back(temporarySpotName);
+        }
+        ++iter;
+    }
+
     // Iterate through all color arrays and disable spots if needed
+    PoDoFo::PdfObject* colorArrayObject;
+    PoDoFo::PdfArray colorArray;
     std::vector<PoDoFo::PdfReference>::iterator it = colorReferences.begin();
     while ( it != colorReferences.end() )
     {
@@ -242,14 +290,16 @@ int main( int argc, char* argv[] )
              * all objects are using this colorspace become invisible.
              */
             // Get the pointer to colorArrayObject for future saving
-            PoDoFo::PdfObject* colorArrayObject = pdfDocObjects.GetObject(*it);
+            colorArrayObject = pdfDocObjects.GetObject(*it);
             // Get the copy of color array value
-            PoDoFo::PdfArray colorArray = colorArrayObject->GetArray();
+            colorArray = colorArrayObject->GetArray();
             //Processing color array entries
             if ( colorArray.GetSize() > 1
                  && colorArray[0].IsName()
                  && colorArray[0].GetName().GetEscapedName() == "Separation"
-                 && colorArray[1].IsName() )
+                 && colorArray[1].IsName() 
+                 && MustBeDisabled( colorArray[1].GetName().GetEscapedName(), 
+                                    spotsToDisable ) )
             {
                 // Change the second array item to /None value
                 colorArray[1] = NONE_COLOR;
