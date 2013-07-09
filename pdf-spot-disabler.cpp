@@ -125,12 +125,13 @@ std::vector<PoDoFo::PdfReference> GetColorReferences(
     return colorReferences;
 }
 
-void CreateSpaces ( std::string & name )
+std::string CreateSpaces ( std::string & name )
 // Converts #20 sequences to spaces
 {
-  while ( name.find("#20") != std::string::npos )
-                    name.replace ( name.find("#20"), 3, " " );
-  return;
+  std::string nameWithSpaces(name);
+  while ( nameWithSpaces.find("#20") != std::string::npos )
+      nameWithSpaces.replace ( nameWithSpaces.find("#20"), 3, " " );
+  return nameWithSpaces;
 }
 
 void ListAvailableSpots( const PoDoFo::PdfMemDocument & pdfDocument,
@@ -158,8 +159,7 @@ void ListAvailableSpots( const PoDoFo::PdfMemDocument & pdfDocument,
                 /* In pdf's spot names spaces are replaced with "#20".
                  * So, replacing them back
                  */
-                CreateSpaces(spotName);
-                std::cout << spotName << std::endl;
+                std::cout << CreateSpaces(spotName) << std::endl;
             }
         }
         ++it;
@@ -194,17 +194,21 @@ bool MustBeDisabled( std::string rawSpotName,
                      std::vector<std::string> & spotsToDisable )
 // Checks if spot rawSpotName must be disabled according to spotsToDisable list
 {
-    // Convert rawSpotName to lowercase
-    std::transform(rawSpotName.begin(), rawSpotName.end(),
-                   rawSpotName.begin(), ::tolower);
+    // When given spot list is empty, disable all spots
+    if ( spotsToDisable.size() < 1 ) return true;
+
+    std::string spotName;
     // Change %20 sequences to spaces
-    CreateSpaces(rawSpotName);
+    spotName = CreateSpaces(rawSpotName);
+    // Convert spotName to lowercase
+    std::transform(spotName.begin(), spotName.end(),
+                   spotName.begin(), ::tolower);
     // Iterate through spotsToDisable
     std::vector<std::string>::iterator it = spotsToDisable.begin();
     while ( it != spotsToDisable.end() )
     {
         // Check if rawSpotName contains current item from spotsToDisable list
-        if ( rawSpotName.find(*it) != std::string::npos ) return true;
+        if ( spotName.find(*it) != std::string::npos ) return true;
         ++it;
     }
     return false;
@@ -225,15 +229,6 @@ int main( int argc, char* argv[] )
     // Initialize vector for storing command line options
     std::vector<std::string> programOptions;
     commandLine >> GetOpt::GlobalOption(programOptions);
-
-    std::cout << "Global options: ";
-    std::vector<std::string>::iterator i = programOptions.begin();
-    while ( i != programOptions.end() )
-    {
-        std::cout << ":" << (*i);
-        ++i;
-    }
-    std::cout << std::endl;
 
     if (not IsProgramOptionsValid(programOptions) )
     {
