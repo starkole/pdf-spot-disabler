@@ -22,7 +22,8 @@ GetOpt_pp: Yet another C++ version of getopt.
 #include <crt_externs.h>
 #define environ (*_NSGetEnviron())
 #elif _WIN32
-#include <Stdio.h>
+#include <stdio.h>
+#include <stdlib.h>
 #define environ _environ
 #else
 #include <unistd.h>

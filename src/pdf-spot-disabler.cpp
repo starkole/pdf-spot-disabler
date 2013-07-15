@@ -26,7 +26,7 @@
 // Include all podofo header files
 #include <podofo/podofo.h>
 //Include command line options parser
-#include "getopt/getopt_pp.h"
+#include "getopt_pp.h"
 
 const PoDoFo::PdfName NONE_COLOR("None");
 
