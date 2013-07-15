@@ -1,4 +1,4 @@
-PDF Spot Disabler is mall command line utility
+PDF Spot Disabler is small command line utility
 for disabling spot colors in PDF files.
 It hides all objects in pdf file that have certain spot color.
 
